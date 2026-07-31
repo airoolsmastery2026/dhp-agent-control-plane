@@ -4,6 +4,7 @@ import { createWorktree, taskWorkspace, validateTaskId } from "./workspace.js";
 import { runQualityGate } from "./quality.js";
 import { writeAudit } from "./audit.js";
 import { TaskStateStore } from "./state.js";
+import { setApproval, writeManifest } from "./manifest.js";
 
 function arg(name: string): string {
   const index = process.argv.indexOf(name);
@@ -20,11 +21,23 @@ async function main(): Promise<void> {
   try {
     if (command === "init-task") {
       const repoPath = path.resolve(arg("--repo"));
+      const objective = arg("--objective");
+      const allowedCommands = arg("--commands").split(",").map((value) => value.trim()).filter(Boolean);
       state.upsert(taskId, "created", { repositoryPath: repoPath });
       const workspace = await createWorktree(taskId, repoPath);
+      await writeManifest({ taskId, repositoryPath: repoPath, workspacePath: workspace, objective, allowedCommands, approval: "pending", approvedBy: null, updatedAt: new Date().toISOString() });
       state.upsert(taskId, "succeeded", { repositoryPath: repoPath, workspacePath: workspace });
-      await writeAudit({ taskId, action: "workspace-created", allowed: true, detail: { repoPath, workspace } });
+      await writeAudit({ taskId, action: "workspace-created", allowed: true, detail: { repoPath, workspace, approval: "pending" } });
       console.log(workspace);
+      return;
+    }
+
+    if (command === "approve" || command === "reject") {
+      const approval = command === "approve" ? "approved" : "rejected";
+      const actor = arg("--by");
+      await setApproval(taskId, approval, actor);
+      await writeAudit({ taskId, action: "task-approval", allowed: approval === "approved", detail: { approval, actor } });
+      console.log(`${taskId}: ${approval}`);
       return;
     }
 
@@ -46,12 +59,7 @@ async function main(): Promise<void> {
 
     if (command === "recover") {
       const recovered = state.recoverInterrupted(taskId);
-      await writeAudit({
-        taskId,
-        action: "task-recovery",
-        allowed: recovered,
-        detail: { recovered, reason: recovered ? "interrupted" : "task-not-running" },
-      });
+      await writeAudit({ taskId, action: "task-recovery", allowed: recovered, detail: { recovered, reason: recovered ? "interrupted" : "task-not-running" } });
       if (!recovered) throw new Error(`Task is not in running state: ${taskId}`);
       console.log(`Recovered interrupted task: ${taskId}`);
       return;
@@ -64,7 +72,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
