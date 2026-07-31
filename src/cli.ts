@@ -13,6 +13,11 @@ function arg(name: string): string {
   return value;
 }
 
+function optionalArg(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
 async function main(): Promise<void> {
   const command = process.argv[2];
   const taskId = validateTaskId(arg("--task"));
@@ -23,11 +28,12 @@ async function main(): Promise<void> {
       const repoPath = path.resolve(arg("--repo"));
       const objective = arg("--objective");
       const allowedCommands = arg("--commands").split(",").map((value) => value.trim()).filter(Boolean);
+      const maxExecutionMs = Number(optionalArg("--timeout-ms") ?? "900000");
       state.upsert(taskId, "created", { repositoryPath: repoPath });
       const workspace = await createWorktree(taskId, repoPath);
-      await writeManifest({ taskId, repositoryPath: repoPath, workspacePath: workspace, objective, allowedCommands, approval: "pending", approvedBy: null, updatedAt: new Date().toISOString() });
+      await writeManifest({ taskId, repositoryPath: repoPath, workspacePath: workspace, objective, allowedCommands, maxExecutionMs, approval: "pending", approvedBy: null, updatedAt: new Date().toISOString() });
       state.upsert(taskId, "succeeded", { repositoryPath: repoPath, workspacePath: workspace });
-      await writeAudit({ taskId, action: "workspace-created", allowed: true, detail: { repoPath, workspace, approval: "pending" } });
+      await writeAudit({ taskId, action: "workspace-created", allowed: true, detail: { repoPath, workspace, approval: "pending", maxExecutionMs } });
       console.log(workspace);
       return;
     }
