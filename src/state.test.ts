@@ -27,6 +27,26 @@ test("persists and updates task state", () => {
   }
 });
 
+test("recovers only interrupted running tasks", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "dhp-state-"));
+  const store = new TaskStateStore(path.join(root, "state.sqlite"));
+
+  try {
+    store.upsert("DHP-RUNNING", "running");
+    assert.equal(store.recoverInterrupted("DHP-RUNNING"), true);
+    assert.equal(store.get("DHP-RUNNING")?.status, "failed");
+    assert.equal(store.get("DHP-RUNNING")?.error, "Task interrupted before completion");
+    assert.equal(store.recoverInterrupted("DHP-RUNNING"), false);
+
+    store.upsert("DHP-DONE", "succeeded");
+    assert.equal(store.recoverInterrupted("DHP-DONE"), false);
+    assert.equal(store.get("DHP-DONE")?.status, "succeeded");
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("creates schema idempotently", () => {
   const root = mkdtempSync(path.join(tmpdir(), "dhp-state-"));
   const databasePath = path.join(root, "state.sqlite");

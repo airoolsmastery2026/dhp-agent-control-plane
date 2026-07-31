@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
-import { createWorktree, taskWorkspace } from "./workspace.js";
+import { createWorktree, taskWorkspace, validateTaskId } from "./workspace.js";
 import { runQualityGate } from "./quality.js";
 import { writeAudit } from "./audit.js";
 import { TaskStateStore } from "./state.js";
@@ -14,7 +14,7 @@ function arg(name: string): string {
 
 async function main(): Promise<void> {
   const command = process.argv[2];
-  const taskId = arg("--task");
+  const taskId = validateTaskId(arg("--task"));
   const state = new TaskStateStore();
 
   try {
@@ -41,6 +41,19 @@ async function main(): Promise<void> {
         await writeAudit({ taskId, action: "quality-gate", allowed: false, detail: { workspace, error: message } });
         throw error;
       }
+      return;
+    }
+
+    if (command === "recover") {
+      const recovered = state.recoverInterrupted(taskId);
+      await writeAudit({
+        taskId,
+        action: "task-recovery",
+        allowed: recovered,
+        detail: { recovered, reason: recovered ? "interrupted" : "task-not-running" },
+      });
+      if (!recovered) throw new Error(`Task is not in running state: ${taskId}`);
+      console.log(`Recovered interrupted task: ${taskId}`);
       return;
     }
 
