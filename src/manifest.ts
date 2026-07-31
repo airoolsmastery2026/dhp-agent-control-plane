@@ -11,6 +11,7 @@ export const taskManifestSchema = z.object({
   workspacePath: z.string().min(1),
   objective: z.string().min(1).max(2000),
   allowedCommands: z.array(z.string().min(1)).min(1),
+  maxExecutionMs: z.number().int().min(1_000).max(3_600_000).default(900_000),
   approval: approvalSchema.default("pending"),
   approvedBy: z.string().min(1).nullable().default(null),
   updatedAt: z.string().datetime(),
