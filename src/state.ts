@@ -72,6 +72,16 @@ export class TaskStateStore {
     );
   }
 
+  recoverInterrupted(taskId: string): boolean {
+    const now = new Date().toISOString();
+    const result = this.database.prepare(`
+      UPDATE tasks
+      SET status = 'failed', error = 'Task interrupted before completion', updated_at = ?
+      WHERE task_id = ? AND status = 'running'
+    `).run(now, taskId);
+    return result.changes === 1;
+  }
+
   get(taskId: string): TaskRecord | null {
     const row = this.database.prepare("SELECT * FROM tasks WHERE task_id = ?").get(taskId) as TaskRow | undefined;
     if (!row) return null;
