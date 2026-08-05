@@ -43,7 +43,7 @@ export class SkillExecutor {
     let error: string | undefined;
 
     try {
-      const manifest = this.registry.get(request.skillId);
+      const manifest = this.registry.require(request.skillId);
       if (!manifest.enabled) {
         throw new Error(`Skill is disabled: ${manifest.id}`);
       }
