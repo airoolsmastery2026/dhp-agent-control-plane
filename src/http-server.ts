@@ -1,7 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { DhpHttpApi } from './http-api.js';
+import type { AuthenticatedApiRequest } from './authenticated-http-api.js';
+import type { ApiResponse } from './http-api.js';
 
 const MAX_BODY_BYTES = 1_000_000;
+
+export interface DhpApiHandler {
+  handle(request: AuthenticatedApiRequest): Promise<ApiResponse>;
+}
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -20,14 +25,23 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
+function normalizeHeaders(request: IncomingMessage): Record<string, string | undefined> {
+  const headers: Record<string, string | undefined> = {};
+  for (const [name, value] of Object.entries(request.headers)) {
+    headers[name] = Array.isArray(value) ? value.join(', ') : value;
+  }
+  return headers;
+}
+
 function writeJson(response: ServerResponse, status: number, body: unknown): void {
   response.statusCode = status;
   response.setHeader('content-type', 'application/json; charset=utf-8');
   response.setHeader('cache-control', 'no-store');
+  response.setHeader('x-content-type-options', 'nosniff');
   response.end(JSON.stringify(body));
 }
 
-export function createDhpHttpServer(api: DhpHttpApi) {
+export function createDhpHttpServer(api: DhpApiHandler) {
   return createServer(async (request, response) => {
     try {
       const host = request.headers.host ?? '127.0.0.1';
@@ -41,6 +55,7 @@ export function createDhpHttpServer(api: DhpHttpApi) {
         method,
         path: url.pathname,
         query: url.searchParams,
+        headers: normalizeHeaders(request),
         body,
       });
 
