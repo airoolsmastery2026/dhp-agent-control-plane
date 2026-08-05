@@ -16,17 +16,17 @@ export class MediaWorkflowOrchestrator {
   }
 
   async runStage(jobId: string): Promise<MediaJob> {
-    const job = this.store.get(jobId);
-    const provider = this.providers.get(job.currentStage);
+    const current = this.store.require(jobId);
+    const provider = this.providers.get(current.currentStage);
 
     if (!provider) {
-      throw new Error(`No provider registered for media stage: ${job.currentStage}`);
+      throw new Error(`No provider registered for media stage: ${current.currentStage}`);
     }
 
-    this.store.markRunning(jobId);
+    const running = current.status === 'queued' ? this.store.start(jobId) : current;
 
     try {
-      const stageOutput = await provider.run(this.store.get(jobId));
+      const stageOutput = await provider.run(running);
       return this.store.completeStage(jobId, stageOutput);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Unknown media provider error';
